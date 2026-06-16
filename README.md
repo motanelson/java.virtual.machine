@@ -1,2 +1,2 @@
 
-https://youtu.be/tuqQgTb3cmU?si=uIfcFT0xp2SZkTH7
+makes a char array of one line to bcc old os code
