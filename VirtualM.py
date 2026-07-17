@@ -1,7 +1,7 @@
 import jpype
 import jpype.imports
 
-print("\033c\033[47;31m")
+print("\033c\033[47;30m")
 print("give me a .class to open?")
 a = "Hello.class"
 a=input().strip()
