@@ -1,0 +1,30 @@
+; --- Hello World & Math in JASM ---
+.class public HelloWorld
+.super java/lang/Object
+
+.method public static main : ()V
+   .limit stack 4
+   .limit locals 2
+
+   getstatic java/lang/System/out Ljava/io/PrintStream;
+   ldc "Hello from Java Virtual Machine!"
+   invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V
+
+   ; Compute (15 * 3) + 7
+   bipush 15
+   iconst_3
+   imul
+   bipush 7
+   iadd
+   istore_1
+
+   getstatic java/lang/System/out Ljava/io/PrintStream;
+   ldc "Calculation Result (15 * 3 + 7):"
+   invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V
+
+   getstatic java/lang/System/out Ljava/io/PrintStream;
+   iload_1
+   invokevirtual java/io/PrintStream/println(I)V
+
+   return
+.end method
