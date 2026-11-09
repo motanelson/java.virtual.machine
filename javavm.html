@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JVM .jasm Virtual Machine & Editor</title>
+  <style>
+    :root {
+      --bg-dark: #ffffffff;
+      --bg-panel: #ffffffff;
+      --bg-active: #ffffffff;
+      --border: #3e3e42;
+      --accent: #e58e26;
+      --accent-hover: #f39c12;
+      --blue: #0984e3;
+      --text-main: #00000000;
+      --text-muted: #858585;
+      --terminal-bg: #181818;
+      --terminal-green: #2ecc71;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "JetBrains Mono", Consolas, monospace;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Header & Toolbar */
+    header {
+      background-color: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: #fff;
+    }
+
+    .brand svg {
+      width: 24px;
+      height: 24px;
+      fill: var(--accent);
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    button, .file-label {
+      background: var(--bg-active);
+      color: #fff;
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    button:hover, .file-label:hover {
+      background: #47474f;
+      border-color: #555;
+    }
+
+    button.btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #121212;
+      font-weight: 700;
+    }
+
+    button.btn-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    button.btn-blue {
+      background: var(--blue);
+      border-color: var(--blue);
+    }
+
+    select {
+      background: var(--bg-active);
+      color: #fff;
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      outline: none;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    /* Main Workspace */
+    .workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr;
+      height: calc(100vh - 55px);
+    }
+
+    /* Left Pane: Editor */
+    .editor-pane {
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      background-color: var(--bg-dark);
+      position: relative;
+    }
+
+    .pane-header {
+      background: var(--bg-panel);
+      padding: 6px 14px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .editor-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .line-numbers {
+      width: 48px;
+      background: var(--bg-dark);
+      padding: 12px 0;
+      color: var(--text-muted);
+      text-align: right;
+      padding-right: 12px;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.9rem;
+      line-height: 1.45rem;
+      user-select: none;
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    #jasmEditor {
+      flex: 1;
+      background: transparent;
+      color: #f1f1f1;
+      border: none;
+      padding: 12px;
+      resize: none;
+      outline: none;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.9rem;
+      line-height: 1.45rem;
+      white-space: pre;
+      overflow: auto;
+      tab-size: 4;
+    }
+
+    /* Right Pane: Runtime & Output */
+    .runtime-pane {
+      display: grid;
+      grid-template-rows: 1.1fr 1fr;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .vm-state {
+      padding: 12px;
+      background: #1a1a1a;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .card-title {
+      font-size: 0.75rem;
+      color: var(--accent);
+      font-weight: bold;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .state-list {
+      flex: 1;
+      min-height: 100px;
+      max-height: 180px;
+      overflow-y: auto;
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      padding: 6px;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.8rem;
+    }
+
+    .state-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 4px;
+      border-bottom: 1px solid #333;
+    }
+
+    .state-item:last-child {
+      border-bottom: none;
+    }
+
+    .console-pane {
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      background: var(--terminal-bg);
+      overflow: hidden;
+    }
+
+    .console-output {
+      flex: 1;
+      padding: 12px;
+      color: var(--terminal-green);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      overflow-y: auto;
+      line-height: 1.4;
+    }
+
+    .tag {
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 0.7rem;
+      background: #333;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation & Controls -->
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 24 24"><path d="M4 19h16v2H4zm14-8h-3v4h3c1.1 0 2-.9 2-2s-.9-2-2-2m-3-6h-7v6h7c1.1 0 2-.9 2-2s-.9-2-2-2m5.7 1.3C21.4 7.6 22 9.2 22 11c0 1.9-.7 3.6-1.8 4.9.7 1 1.2 2.1 1.6 3.1h-2.1c-.3-.7-.7-1.5-1.2-2.2-.9.7-2.1 1.2-3.5 1.2H6V3h9c2 0 3.7.8 4.7 2.3z"/></svg>
+      JVM .jasm Studio
+    </div>
+
+    <div class="toolbar">
+      <label class="file-label" for="fileInput">
+        📁 Open .jasm
+      </label>
+      <input type="file" id="fileInput" accept=".jasm,.txt,.class" />
+
+      <select id="sampleSelect" title="Load sample program">
+        <option value="">Load Sample Program...</option>
+        <option value="hello">Hello World & Add</option>
+        <option value="factorial">Factorial (Loops & Branching)</option>
+        <option value="fibonacci">Fibonacci Sequence</option>
+      </select>
+
+      <button id="btnDownload" title="Save changes as a .jasm file">💾 Download .jasm</button>
+      <button id="btnStep" class="btn-blue" title="Execute single instruction">↷ Step</button>
+      <button id="btnRun" class="btn-primary" title="Execute all">▶ Run</button>
+      <button id="btnReset" title="Reset VM State">↺ Reset</button>
+    </div>
+  </header>
+
+  <!-- Main View -->
+  <div class="workspace">
+    <!-- Code Editor Section -->
+    <div class="editor-pane">
+      <div class="pane-header">
+        <span>Assembly Source (.jasm)</span>
+        <span id="fileStatus">untitled.jasm</span>
+      </div>
+      <div class="editor-container">
+        <div class="line-numbers" id="lineNumbers">1</div>
+        <textarea id="jasmEditor" spellcheck="false" placeholder="Write or load Java Bytecode Assembly (.jasm)..."></textarea>
+      </div>
+    </div>
+
+    <!-- VM Runtime & Console Section -->
+    <div class="runtime-pane">
+      <!-- VM Internal State Viewer -->
+      <div class="vm-state">
+        <div class="card">
+          <div class="card-title">
+            <span>Operand Stack</span>
+            <span class="tag" id="stackDepth">depth: 0</span>
+          </div>
+          <div class="state-list" id="stackView">
+            <div style="color: #666; font-style: italic;">(empty)</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <span>Local Variables</span>
+            <span class="tag" id="localsCount">vars: 0</span>
+          </div>
+          <div class="state-list" id="localsView">
+            <div style="color: #666; font-style: italic;">(none)</div>
+          </div>
+        </div>
+
+        <div class="card" style="grid-column: span 2;">
+          <div class="card-title">
+            <span>Program Counter (PC)</span>
+            <span id="pcStatus" style="color: var(--accent);">PC: 0</span>
+          </div>
+          <div style="font-size: 0.8rem; font-family: 'JetBrains Mono', monospace;" id="currentInstrDisplay">
+            Next: <span style="color: #bbb;">(Ready)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Execution Output Console -->
+      <div class="console-pane">
+        <div class="pane-header">
+          <span>Standard Output (System.out)</span>
+          <button id="btnClearConsole" style="padding: 2px 8px; font-size: 0.7rem;">Clear</button>
+        </div>
+        <div class="console-output" id="consoleOutput">JVM Initialized. Ready to interpret .jasm bytecode.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* =========================================================
+       Sample .jasm Programs
+       ========================================================= */
+    const SAMPLES = {
+      hello: 
+`; --- Hello World & Math in JASM ---
+.class public HelloWorld
+.super java/lang/Object
+
+.method public static main : ()V
+   .limit stack 4
+   .limit locals 2
+
+   getstatic java/lang/System/out Ljava/io/PrintStream;
+   ldc "Hello from Java Virtual Machine!"
+   invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V
+
+   ; Compute (15 * 3) + 7
+   bipush 15
+   iconst_3
+   imul
+   bipush 7
+   iadd
+   istore_1
+
+   getstatic java/lang/System/out Ljava/io/PrintStream;
+   ldc "Calculation Result (15 * 3 + 7):"
+   invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V
+
+   getstatic java/lang/System/out Ljava/io/PrintStream;
+   iload_1
+   invokevirtual java/io/PrintStream/println(I)V
+
+   return
+.end method`,
+
+      factorial:
+`; --- Factorial of 5 (5! = 120) ---
+.class public Factorial
+.super java/lang/Object
+
+.method public static main : ()V
+   .limit stack 5
+   .limit locals 3
+
+   iconst_5
+   istore_1         ; n = 5
+   iconst_1
+   istore_2         ; result = 1
+
+Loop:
+   iload_1
+   iconst_1
+   if_icmple Done   ; if n <= 1 jump to Done
+
+   iload_2
+   iload_1
+   imul
+   istore_2         ; result = result * n
+
+   iload_1
+   iconst_1
+   isub
+   istore_1         ; n = n - 1
+
+   goto Loop
+
+Done:
+   getstatic java/lang/System/out Ljava/io/PrintStream;
+   ldc "Factorial result:"
+   invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V
+
+   getstatic java/lang/System/out Ljava/io/PrintStream;
+   iload_2
+   invokevirtual java/io/PrintStream/println(I)V
+
+   return
+.end method`,
+
+      fibonacci:
+`; --- Fibonacci Sequence (First 7 numbers) ---
+.class public Fibonacci
+.super java/lang/Object
+
+.method public static main : ()V
+   .limit stack 4
+   .limit locals 5
+
+   iconst_0
+   istore_1         ; a = 0
+   iconst_1
+   istore_2         ; b = 1
+   bipush 7
+   istore_3         ; count = 7
+
+Loop:
+   iload_3
+   ifeq Exit
+
+   ; Print a
+   getstatic java/lang/System/out Ljava/io/PrintStream;
+   iload_1
+   invokevirtual java/io/PrintStream/println(I)V
+
+   ; next = a + b
+   iload_1
+   iload_2
+   iadd
+   istore 4
+
+   ; a = b
+   iload_2
+   istore_1
+
+   ; b = next
+   iload 4
+   istore_2
+
+   ; count--
+   iload_3
+   iconst_1
+   isub
+   istore_3
+
+   goto Loop
+
+Exit:
+   return
+.end method`
+    };
+
+    /* =========================================================
+       Virtual Machine Interpreter Core
+       ========================================================= */
+    class JVMInterpreter {
+      constructor() {
+        this.reset();
+      }
+
+      reset() {
+        this.instructions = [];
+        this.labels = {};
+        this.pc = 0;
+        this.stack = [];
+        this.locals = [];
+        this.isHalted = true;
+      }
+
+      load(code) {
+        this.reset();
+        const lines = code.split('\n');
+        this.instructions = [];
+        this.labels = {};
+
+        // Parse lines, strip comments, register labels
+        for (let i = 0; i < lines.length; i++) {
+          let line = lines[i].trim();
+          if (line.includes(';')) line = line.substring(0, line.indexOf(';')).trim();
+          if (!line) continue;
+
+          // Check if directive (.class, .limit, etc)
+          if (line.startsWith('.')) continue;
+
+          // Check for label definitions like `Loop:`
+          if (line.endsWith(':')) {
+            const labelName = line.slice(0, -1).trim();
+            this.labels[labelName] = this.instructions.length;
+            continue;
+          }
+
+          // Parse instruction mnemonic and args
+          const match = line.match(/^([^\s]+)(?:\s+(.*))?$/);
+          if (match) {
+            const opcode = match[1];
+            let rawArgs = match[2] ? match[2].trim() : '';
+
+            // Tokenize arguments (handles strings in quotes)
+            let args = [];
+            if (rawArgs.length > 0) {
+              let current = '';
+              let inQuotes = false;
+              for (let ch of rawArgs) {
+                if (ch === '"') inQuotes = !inQuotes;
+                if (ch === ' ' && !inQuotes) {
+                  if (current) args.push(current);
+                  current = '';
+                } else {
+                  current += ch;
+                }
+              }
+              if (current) args.push(current);
+            }
+
+            this.instructions.push({
+              opcode,
+              args,
+              lineNum: i + 1,
+              raw: line
+            });
+          }
+        }
+        this.isHalted = this.instructions.length === 0;
+      }
+
+      step(logCallback) {
+        if (this.isHalted || this.pc >= this.instructions.length) {
+          this.isHalted = true;
+          return { done: true };
+        }
+
+        const instr = this.instructions[this.pc];
+        const op = instr.opcode.toLowerCase();
+        const args = instr.args;
+        this.pc++;
+
+        try {
+          switch (op) {
+            // Push constants
+            case 'iconst_m1': this.stack.push(-1); break;
+            case 'iconst_0': this.stack.push(0); break;
+            case 'iconst_1': this.stack.push(1); break;
+            case 'iconst_2': this.stack.push(2); break;
+            case 'iconst_3': this.stack.push(3); break;
+            case 'iconst_4': this.stack.push(4); break;
+            case 'iconst_5': this.stack.push(5); break;
+            case 'bipush':
+            case 'sipush':
+              this.stack.push(parseInt(args[0], 10));
+              break;
+            case 'ldc': {
+              let val = args[0];
+              if (val.startsWith('"') && val.endsWith('"')) {
+                val = val.substring(1, val.length - 1);
+              } else if (!isNaN(val)) {
+                val = Number(val);
+              }
+              this.stack.push(val);
+              break;
+            }
+
+            // Local variable stores
+            case 'istore':
+            case 'astore':
+              this.locals[parseInt(args[0], 10)] = this.stack.pop();
+              break;
+            case 'istore_0': case 'astore_0': this.locals[0] = this.stack.pop(); break;
+            case 'istore_1': case 'astore_1': this.locals[1] = this.stack.pop(); break;
+            case 'istore_2': case 'astore_2': this.locals[2] = this.stack.pop(); break;
+            case 'istore_3': case 'astore_3': this.locals[3] = this.stack.pop(); break;
+
+            // Local variable loads
+            case 'iload':
+            case 'aload':
+              this.stack.push(this.locals[parseInt(args[0], 10)] ?? 0);
+              break;
+            case 'iload_0': case 'aload_0': this.stack.push(this.locals[0] ?? 0); break;
+            case 'iload_1': case 'aload_1': this.stack.push(this.locals[1] ?? 0); break;
+            case 'iload_2': case 'aload_2': this.stack.push(this.locals[2] ?? 0); break;
+            case 'iload_3': case 'aload_3': this.stack.push(this.locals[3] ?? 0); break;
+
+            // Arithmetic Operations
+            case 'iadd': {
+              const b = this.stack.pop(), a = this.stack.pop();
+              this.stack.push(a + b);
+              break;
+            }
+            case 'isub': {
+              const b = this.stack.pop(), a = this.stack.pop();
+              this.stack.push(a - b);
+              break;
+            }
+            case 'imul': {
+              const b = this.stack.pop(), a = this.stack.pop();
+              this.stack.push(a * b);
+              break;
+            }
+            case 'idiv': {
+              const b = this.stack.pop(), a = this.stack.pop();
+              if (b === 0) throw new Error("ArithmeticException: / by zero");
+              this.stack.push(Math.trunc(a / b));
+              break;
+            }
+            case 'irem': {
+              const b = this.stack.pop(), a = this.stack.pop();
+              this.stack.push(a % b);
+              break;
+            }
+            case 'iinc': {
+              const idx = parseInt(args[0], 10);
+              const val = parseInt(args[1], 10);
+              this.locals[idx] = (this.locals[idx] ?? 0) + val;
+              break;
+            }
+
+            // Stack Operations
+            case 'dup': {
+              const val = this.stack[this.stack.length - 1];
+              this.stack.push(val);
+              break;
+            }
+            case 'pop': this.stack.pop(); break;
+
+            // Branching / Jumps
+            case 'goto': {
+              const target = args[0];
+              if (this.labels[target] === undefined) throw new Error(`Unknown label: ${target}`);
+              this.pc = this.labels[target];
+              break;
+            }
+            case 'ifeq': {
+              const v = this.stack.pop();
+              if (v === 0) this.pc = this.labels[args[0]];
+              break;
+            }
+            case 'ifne': {
+              const v = this.stack.pop();
+              if (v !== 0) this.pc = this.labels[args[0]];
+              break;
+            }
+            case 'if_icmpeq': {
+              const b = this.stack.pop(), a = this.stack.pop();
+              if (a === b) this.pc = this.labels[args[0]];
+              break;
+            }
+            case 'if_icmpne': {
+              const b = this.stack.pop(), a = this.stack.pop();
+              if (a !== b) this.pc = this.labels[args[0]];
+              break;
+            }
+            case 'if_icmplt': {
+              const b = this.stack.pop(), a = this.stack.pop();
+              if (a < b) this.pc = this.labels[args[0]];
+              break;
+            }
+            case 'if_icmpge': {
+              const b = this.stack.pop(), a = this.stack.pop();
+              if (a >= b) this.pc = this.labels[args[0]];
+              break;
+            }
+            case 'if_icmpgt': {
+              const b = this.stack.pop(), a = this.stack.pop();
+              if (a > b) this.pc = this.labels[args[0]];
+              break;
+            }
+            case 'if_icmple': {
+              const b = this.stack.pop(), a = this.stack.pop();
+              if (a <= b) this.pc = this.labels[args[0]];
+              break;
+            }
+
+            // Method Invocation & Special Objects
+            case 'getstatic': {
+              // Pushes a mock reference for java/lang/System/out
+              this.stack.push("[PrintStream:out]");
+              break;
+            }
+            case 'invokevirtual': {
+              const methodSig = args[0] || '';
+              if (methodSig.includes('println')) {
+                const val = this.stack.pop();
+                const objRef = this.stack.pop(); // System.out
+                if (logCallback) logCallback(val);
+              }
+              break;
+            }
+
+            case 'return':
+            case 'ireturn':
+              this.isHalted = true;
+              return { done: true };
+
+            default:
+              console.warn(`Unimplemented or custom opcode: ${op}`);
+          }
+        } catch (err) {
+          this.isHalted = true;
+          throw new Error(`Runtime error at line ${instr.lineNum} (${instr.raw}): ${err.message}`);
+        }
+
+        return { done: false, lastInstr: instr };
+      }
+    }
+
+    /* =========================================================
+       DOM Management & Integration
+       ========================================================= */
+    const editor = document.getElementById('jasmEditor');
+    const lineNumbers = document.getElementById('lineNumbers');
+    const stackView = document.getElementById('stackView');
+    const localsView = document.getElementById('localsView');
+    const stackDepth = document.getElementById('stackDepth');
+    const localsCount = document.getElementById('localsCount');
+    const pcStatus = document.getElementById('pcStatus');
+    const currentInstrDisplay = document.getElementById('currentInstrDisplay');
+    const consoleOutput = document.getElementById('consoleOutput');
+    const fileInput = document.getElementById('fileInput');
+    const fileStatus = document.getElementById('fileStatus');
+    const sampleSelect = document.getElementById('sampleSelect');
+
+    const vm = new JVMInterpreter();
+
+    // Line number syncing
+    function updateLineNumbers() {
+      const lines = editor.value.split('\n').length;
+      lineNumbers.innerHTML = Array.from({ length: lines }, (_, i) => i + 1).join('<br>');
+    }
+
+    editor.addEventListener('input', updateLineNumbers);
+    editor.addEventListener('scroll', () => {
+      lineNumbers.scrollTop = editor.scrollTop;
+    });
+
+    // Console Helper
+    function appendConsole(msg, isError = false) {
+      if (consoleOutput.textContent === "JVM Initialized. Ready to interpret .jasm bytecode.") {
+        consoleOutput.textContent = "";
+      }
+      const entry = document.createElement('div');
+      entry.style.color = isError ? '#e74c3c' : 'var(--terminal-green)';
+      entry.textContent = msg;
+      consoleOutput.appendChild(entry);
+      consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    }
+
+    // Update UI elements for JVM State
+    function renderVMState() {
+      // Stack
+      stackDepth.textContent = `depth: ${vm.stack.length}`;
+      if (vm.stack.length === 0) {
+        stackView.innerHTML = '<div style="color: #666; font-style: italic;">(empty)</div>';
+      } else {
+        stackView.innerHTML = vm.stack
+          .map((v, i) => `<div class="state-item"><span>[${i}]</span><strong>${v}</strong></div>`)
+          .reverse()
+          .join('');
+      }
+
+      // Locals
+      const activeLocals = Object.keys(vm.locals);
+      localsCount.textContent = `vars: ${activeLocals.length}`;
+      if (activeLocals.length === 0) {
+        localsView.innerHTML = '<div style="color: #666; font-style: italic;">(none)</div>';
+      } else {
+        localsView.innerHTML = activeLocals
+          .map(k => `<div class="state-item"><span>local_${k}</span><strong>${vm.locals[k]}</strong></div>`)
+          .join('');
+      }
+
+      // PC
+      pcStatus.textContent = `PC: ${vm.pc}`;
+      if (vm.pc < vm.instructions.length && !vm.isHalted) {
+        const next = vm.instructions[vm.pc];
+        currentInstrDisplay.innerHTML = `Next [L${next.lineNum}]: <strong style="color: #4cd137;">${next.raw}</strong>`;
+      } else {
+        currentInstrDisplay.innerHTML = `<span style="color: #aaa;">VM Halted / Complete</span>`;
+      }
+    }
+
+    function initVM() {
+      try {
+        vm.load(editor.value);
+        renderVMState();
+      } catch (e) {
+        appendConsole(`Load Error: ${e.message}`, true);
+      }
+    }
+
+    // Step Execution
+    document.getElementById('btnStep').addEventListener('click', () => {
+      if (vm.isHalted) initVM();
+      try {
+        const res = vm.step((val) => appendConsole(val));
+        renderVMState();
+        if (res.done) {
+          appendConsole(`[Process finished with exit code 0]`);
+        }
+      } catch (err) {
+        appendConsole(err.message, true);
+        renderVMState();
+      }
+    });
+
+    // Run Full Execution
+    document.getElementById('btnRun').addEventListener('click', () => {
+      initVM();
+      let cycles = 0;
+      const MAX_CYCLES = 50000; // Protection against infinite loops
+
+      try {
+        while (!vm.isHalted && cycles < MAX_CYCLES) {
+          vm.step((val) => appendConsole(val));
+          cycles++;
+        }
+        if (cycles >= MAX_CYCLES) {
+          appendConsole(`Execution halted: maximum cycle limit exceeded (${MAX_CYCLES}). Possible infinite loop.`, true);
+        } else {
+          appendConsole(`[Process finished with exit code 0]`);
+        }
+      } catch (err) {
+        appendConsole(err.message, true);
+      }
+      renderVMState();
+    });
+
+    // Reset VM
+    document.getElementById('btnReset').addEventListener('click', () => {
+      initVM();
+      appendConsole(`--- VM Reset ---`);
+    });
+
+    // Clear Console
+    document.getElementById('btnClearConsole').addEventListener('click', () => {
+      consoleOutput.innerHTML = '';
+    });
+
+    // File Open Handler
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        editor.value = event.target.result;
+        fileStatus.textContent = file.name;
+        updateLineNumbers();
+        initVM();
+        appendConsole(`Loaded file: ${file.name}`);
+      };
+      reader.readAsText(file);
+    });
+
+    // File Download Handler
+    document.getElementById('btnDownload').addEventListener('click', () => {
+      const text = editor.value;
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileStatus.textContent.endsWith('.jasm') ? fileStatus.textContent : 'program.jasm';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    // Sample selection
+    sampleSelect.addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (val && SAMPLES[val]) {
+        editor.value = SAMPLES[val];
+        fileStatus.textContent = `${val}.jasm`;
+        updateLineNumbers();
+        initVM();
+        appendConsole(`Loaded sample: ${val}.jasm`);
+      }
+    });
+
+    // Default Initialization
+    editor.value = SAMPLES.hello;
+    fileStatus.textContent = "HelloWorld.jasm";
+    updateLineNumbers();
+    initVM();
+  </script>
+</body>
+</html>
